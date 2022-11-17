@@ -1,0 +1,142 @@
+%% Load Obstacles and hold the axis (Part a)
+close all; clear; 
+[ax, Obstacles] = LoadObstacles; hold on;
+M = 50;
+ax.Visible = 'off'; frame = getframe(ax); ax.Visible = 'on'; 
+img = imresize(frame.cdata,[M,M]); [s1,s2,s3] = size(img); bit = flipud(rgb2gray(img)); 
+bitmap = zeros(s1,s2); bitmap(bit<255) = 1;
+
+
+
+%% Perform Wavefront (Part b)
+title('select a goal to generate wavefront','FontSize', 15);
+qgoal = ginput(1); plot(qgoal(1), qgoal(2), 'ok', 'MarkerFaceColor', 'k', 'MarkerSize', 5);
+text(qgoal(1), qgoal(2) - 0.5, '$q_{goal}$','Interpreter', 'latex', 'FontSize', 15);
+GoalPt  = floor((flip(qgoal) - [ax.XLim(1), ax.YLim(1)])./([ax.XLim(2), ax.YLim(2)] - [ax.XLim(1), ax.YLim(1)]).*[s1, s2]) + [1,1];
+bitmap = wavefrontv(bitmap, GoalPt); 
+bitmap(bitmap == 1) = s1+s2;
+
+
+% 
+
+
+bitmap_nodes = linspace(0,10,M);
+G=PGraph();
+G.add_node([bitmap_nodes(GoalPt(1)),bitmap_nodes(GoalPt(2))]);
+for i =1:M
+    for j = 1:M
+        q =[bitmap_nodes(i),bitmap_nodes(j)];
+        isfree=isFree(q, Obstacles);
+        if isfree
+            node_id=G.add_node(q);
+            G.setcost(node_id, bitmap(i,j))
+        end
+    end
+end    
+G.plot('NodeSize',3);
+hold on;
+
+
+
+%% Add start point for testing 
+prompt = {'How many tests do you want to run?'};
+NTest = 'Number of Test for WaveFront';
+definput = {'2'};
+dims = [1 40];
+
+opts.Interpreter = 'tex';
+N = inputdlg(prompt,NTest,dims,definput,opts); N = str2double(N{1});
+% delete(f); axes(ax);
+for n = 1:N
+    %input your start position
+    qstart = ginput(1); plot(qstart(1), qstart(2), 'ok', 'MarkerFaceColor','k', 'MarkerSize', 5);
+    text(qstart(1), qstart(2) - 0.5, '$q_{start}$','Interpreter', 'latex', 'FontSize', 15);
+    StartPt = floor((flip(qstart) - [ax.XLim(1), ax.YLim(1)])./([ax.XLim(2), ax.YLim(2)] - [ax.XLim(1), ax.YLim(1)]).*[s1, s2]) + [1,1];
+    %BFS with steepest gradient
+    path = findwavefrontpath(bitmap, StartPt); m = size(path,1);
+    % convert xy
+    Pathxy = fliplr((path - ones(m,1)*[1,1]).*(ones(m,1)*[ax.XLim(2), ax.YLim(2)] - [ax.XLim(1), ax.YLim(1)])./(ones(m,1)*[s1,s2]) + ones(m,1)*[ax.XLim(1), ax.YLim(1)]);
+    %plot path
+    plot(Pathxy(:,1), Pathxy(:,2), 'linewidth', 3);
+end
+
+
+f = figure(2); 
+dx = diff(ax.XLim)/M; dy = diff(ax.YLim)/M;
+[X,Y] = meshgrid(dy*(0.5:1:M),dx*(0.5:1:M));
+surf(X,Y,bitmap); hold on; plot(Pathxy(:,1), Pathxy(:,2),
+
+% clear;
+n = 100; r = 4;
+% [ax, isfreefxn] = LoadObstacles;
+% G = SampleFree(ax, isfreefxn, n);
+GsPRM = sPRM(G, isfreefxn, r);
+title('This is sPRM Graph, Select start and goals among the nodes','FontSize', 15);
+%% Add start point for testing 
+prompt = {'How many tests do you want to run?'};
+NTest = 'Number of Test for WaveFront';
+definput = {'2'};
+dims = [1 40];
+opts.Interpreter = 'tex';
+N = inputdlg(prompt,NTest,dims,definput,opts); N = str2double(N{1});
+for n = 1:N
+    %input your start position
+    qstart = ginput(1); 
+    ds = vecnorm(ones(GsPRM.n,1)*qstart - GsPRM.vertexlist',2,2); [~,start] = min(ds); qstart = GsPRM.coord(start)';
+    plot(qstart(1), qstart(2), 'or', 'MarkerFaceColor','r', 'MarkerSize', 8);
+    
+    %input your goal position
+    qgoal = ginput(1); 
+    ds = vecnorm(ones(GsPRM.n,1)*qgoal - GsPRM.vertexlist',2,2); [~,goal] = min(ds); qgoal = GsPRM.coord(goal)';
+    plot(qgoal(1), qgoal(2), 'og', 'MarkerFaceColor','g', 'MarkerSize', 8);
+    
+    %Astar 
+    pathidx = Astar(GsPRM, start, goal); Path = GsPRM.vertexlist(:,pathidx);
+    plot(Path(1,:),Path(2,:), 'linewidth', 3);
+end
+
+function bitmap = wavefrontv(bitmap, GoalPt)
+cost = 2; [s1, s2] = size(bitmap);
+bitmap(GoalPt(1), GoalPt(2)) = cost;
+nghbrs = ones(4,1)*GoalPt + [-1,0;0,1;1,0;0,-1];
+while (~isempty(nghbrs))
+    Nxt_nghbrs = []; cost = cost + 1;
+    for i = 1:size(nghbrs,1)
+        m = nghbrs(i,1); n = nghbrs(i,2);
+        if(1 <= m && m <= s1 && 1 <= n && n <= s2)
+            bitmap(m, n) = cost;
+            Nxt_nghbrs = [Nxt_nghbrs; ones(4,1)*[m,n]+ [-1,0;0,1;1,0;0,-1]];
+        end
+    end
+  
+    %Eliminate Repeated Indecies
+
+    
+    %Eliminate Out of Bounds
+
+    Nxt_nghbrs = Nxt_nghbrs(Nxt_nghbrs(:,1) >= 1 & Nxt_nghbrs(:,1) <= s1 &...
+                        Nxt_nghbrs(:,2)>=1 & Nxt_nghbrs(:,2)<= s2, :);
+    Nxt_nghbrs = unique(Nxt_nghbrs,'rows');
+
+    %Remove Already Filled
+    idx = sub2ind([s1, s2], Nxt_nghbrs(:,1), Nxt_nghbrs(:,2));
+    Nxt_nghbrs = Nxt_nghbrs((bitmap(idx) == 0),:);
+    
+    %Set Next Neighbours to Neighbours
+    nghbrs = Nxt_nghbrs
+end
+
+end
+
+function path = findwavefrontpath(bitmap, StartPt)
+[s1, s2] = size(bitmap); Currentpt = StartPt; path = Currentpt;  
+currentval = bitmap(Currentpt(1), Currentpt(2));
+while(currentval>2)
+    nghbrs = ones(4,1)*Currentpt+ [-1,0;0,1;1,0;0,-1];%[-1,0; -1,1; 0,1; 1,1;1,0;1,-1;0,-1;-1,-1];
+    nghbrs = nghbrs(nghbrs(:,1) >= 1 & nghbrs(:,1) <= s1 & nghbrs(:,2)>=1 & nghbrs(:,2)<= s2, :);
+    idx = sub2ind([s1, s2], nghbrs(:,1), nghbrs(:,2));
+    vals = bitmap(idx); [currentval,id] = min(vals);
+    Currentpt = nghbrs(id,:);
+    path = [path;Currentpt];
+end
+end

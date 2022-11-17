@@ -1,0 +1,119 @@
+% This is sPRM from Karaman 2011, Sampling-based algorithms for optimal 
+% motion planning. Page 853, Algorithm 2
+close all; clear; 
+[ax, Obstacles] = LoadObstacles;
+O = Obstacles;  % Environment
+n = 50;             % Number of samples
+r = 3;              % Radius of proximity for function near
+step = 0.1;         % Step for collision checking in a straight line
+
+[G]=SPRMfunc(O, n, r, step);
+G.plot();
+hold on;
+G = sprmquery(G,O,step, r);
+G.plot();
+path = G.Astar(51,52);
+pathxy= G.coord(path);
+plot(pathxy(1,:), pathxy(2,:), 'r','linewidth', 3);
+
+
+function [G] =SPRMfunc(O, n, r, step)
+G = SampleFree(n, O);
+% Line 2
+for v = 1 : n
+    % Line 3
+    U = Near(G, v, r);
+    % Line 4
+    for u=U
+        % Line 5
+        if CollisionFree(G,u,v,step,O)
+            G.add_edge(u,v);
+        end    
+    end
+end
+end
+% 
+function [G] =PRMfunc(O, n, r, step)
+G = SampleFree(n, O);
+% Line 2
+for v = 1 : n
+    % Line 3
+    U = Near(G, v, r);
+    % Line 4
+    for u=U
+        % Line 5
+        path = BFS(G, u, v);
+        if(isempty(path))
+            if CollisionFree(G,u,v,step,O)
+                G.add_edge(u,v);
+            end
+        end
+    end
+end
+end
+
+% Query phase 
+
+function G = sprmquery(G,O,step, r)
+
+title('select a start & goal point to generate wavefront','FontSize', 12);
+points= ginput(2);
+start= points(1,:);
+goal = points(2,:);
+
+% add initial position to the graph
+init = start;
+G.add_node(init);
+near= Near(G, G.n, r); % G.n is the number of the node at init
+for v=near
+    if CollisionFree(G, v, G.n, step, O) 
+        G.add_edge(v, G.n);
+%         break;        % If we break, we will connect with a single edge 
+    end
+end
+% add goal position to the graph
+G.add_node(goal);
+near= Near(G, G.n, r);
+for v=near
+    if CollisionFree(G, v, G.n, step, O) 
+        G.add_edge(v, G.n);
+%         break;
+    end
+end
+
+end
+
+
+% Functions
+
+function G = SampleFree(n, O)
+    G = PGraph();
+    count = 0;
+    while count < n
+        qx = rand * 10;
+        qy = rand * 10;
+        q=[qx; qy];
+        if isFree(q,O)
+            G.add_node(q);
+            count = count + 1;
+        end
+    end
+end
+
+function near = Near(G, v, r)
+    [d, w] = G.distances(G.coord(v));
+    near = w((d<r)&(d>0)); % This is to get all nodes smaller than n and greater than 0
+end
+
+function collision = CollisionFree(G, v, u, step, O)
+    direction = (G.coord(v)-G.coord(u))/norm(G.coord(v)-G.coord(u));
+    position = step;
+    collision = false;
+    while (position < norm(G.coord(v)-G.coord(u))) 
+        if ~isFree(G.coord(u)+direction*position,O)
+            return
+        end
+        position = position + step;
+    end
+    collision = true;
+end
